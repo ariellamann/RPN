@@ -1,0 +1,44 @@
+############################################################   
+# 
+#                       urt0.ums
+#
+# urt0.ums begins the um environment initialization. This
+# file creates a 100,000 word stack and sets the zero
+# register to actually contain 0. The init section will
+# fall through to the contents of calc40.ums. Main will not
+# be called until the last init section in callmain.ums.
+#
+# There are no changes to the global register convention (GRC) in
+# this file.
+#
+############################################################
+.zero  r0 # sets zero register to r0, per GRC
+.temps r6, r7 # sets r6, r7 as temp registers per GRC
+
+########################################
+#
+#               _ustart
+# 
+# Sets the 0-register to equal 0 
+#
+# Sets the stack pointer to point to the 
+# end of the stack. 
+#
+########################################
+.section init
+_ustart:
+      r0 := 0
+      r2 := endstack
+
+########################################
+# 
+# Allocates 100,000 words for the call-stack
+#
+# labels the end of the stack, <endstack>
+# to the address of the first word after
+# the call-stack.
+#
+########################################
+.section data
+      .space 100000
+endstack:   

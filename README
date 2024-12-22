@@ -1,0 +1,85 @@
+===============================================================================
+                        CS-40 Homework 8: ASM Coding
+===============================================================================
+
+        Authors: Andrew Lawrence (alawre02), Ariella Mann (amann04)
+
+        Date Started: 04/16/2024
+        Date Due: 04/29/2024, with one late token: 04/30/2024
+
+        Compile script: compile
+
+===============================================================================
+                        Acknowledgements
+===============================================================================
+We'd like to thank TA Tim for his help!
+
+===============================================================================
+                        Implementation
+===============================================================================
+From our understanding we have correctly implemented the entirety of the RPN
+calculator.
+
+===============================================================================
+                        Register Use & Code Conventions
+===============================================================================
+Register Calling/Use Conventions
+        Global Register Conventions (GRC) as follows. If a register changes 
+        convention within the code, we will document the change.
+
+        r0 = 0
+        r1 = return address, return value
+        r2 = call-stack pointer
+        r3 = non-volatile  register (callee-saves)
+        r4 = non-volatile  register (callee-saves)
+        r5 = non-volatile  register (callee-saves)
+        r6 = volatile temp register (caller-saves)
+        r7 = volatile temp register (caller-saves)
+
+Register-related Code Conventions
+        We never let related code blocks fall through, instead we always use a 
+        goto. This way it is easiest to determine the program flow.
+
+        We label function helpers/cases with <_LABEL>.
+
+        Function parameters are passed in through the stack as the topmost 
+        value(s). All functions are non-volatile.
+
+===============================================================================
+                        Printd Implementation
+===============================================================================
+We chose to implement the print module through a recursive digit extraction
+function. 
+
+===============================================================================
+                        RPN Value-stack Implementation
+===============================================================================
+We are representing the RPN calculator value-stack through a secondary stack
+that is pointed to by r3.
+
+===============================================================================
+                        Section Analysis
+===============================================================================
+urt0.ums
+        .section init - Sets register r2 to address of first word after the
+                        call stack and r0 to zero.
+        .section data - Allocates space for the call-stack.
+
+calc40.ums
+        .section data - Allocates space for the value-stack.
+        .section rodata - Allocates space for jump table. 
+        .section init - Initializes the jump table values.
+        .section text - Does operations for the RPN calc.
+
+printd.ums
+        .section text - Contains the code to print out any 32-bit signed
+                        integer.
+
+callmain.ums
+        .section init - Calls the main x
+===============================================================================
+                        Hours
+===============================================================================
+Hours spent analyzing the assignment    | 2 hours
+Hours spent writing assembly code       | 6 hours
+Hours spent debugging the calculator    | 4 hours

@@ -1,0 +1,27 @@
+############################################################   
+# 
+#                       callmain.ums  
+#
+# This file is compiled so that it terminates the init section by
+# calling main and linking r1. It will halt the program after 
+# main returns.
+#
+# There are no changes to the global register convention (GRC) in
+# this file.
+#
+############################################################
+.zero  r0 # sets zero register to r0, per GRC
+.temps r6, r7 # sets r6, r7 as temp registers per GRC
+
+########################################
+#
+#             _callmain
+# 
+# Calls main linking r1 and halts once
+# main returns.
+#
+########################################
+.section init
+_callmain:
+        goto main linking r1
+        halt

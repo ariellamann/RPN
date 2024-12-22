@@ -1,0 +1,583 @@
+############################################################   
+# 
+#                       calc40.ums
+#
+# calc40.ums allocates and initializes a new, 100,000 word,
+# value-stack for the rpn calculator. It also allocates and 
+# initializes a new, 256 word, jump table for all possible
+# input values. Lastly, it contains the operation and query
+# loop code for the program.
+#
+# There are changes to the global register convention (GRC) in
+# this file. See function/section labels for change notes.
+#
+############################################################
+.zero  r0 # sets zero register to r0, per GRC
+.temps r6, r7 # sets r6, r7 as temp registers per GRC
+
+########################################
+#
+#             value_stack
+# 
+# Declares a value stack of size 100,000.
+# Sets the <value_stack> label to the word
+# after the end of the stack.
+#
+########################################
+.section data
+        .space 100000
+value_stack:
+
+########################################
+#
+#             ascii_table
+# 
+# Declares a jump table of size 256. Sets
+# The <ascii_table> label to the front
+# of the jump table.
+#
+########################################
+.section rodata
+ascii_table:
+        .space 256
+
+########################################
+#
+#             Jump Table init
+# 
+# Initializes jump table with lables 
+# used in the program below.
+#
+########################################
+.section init
+_init_ascii:
+        push r3 on stack r2 # for posterity's sake, save r3, r4
+        push r4 on stack r2
+
+        r3 := 0 # sets r3 to 0 here so that the _init_all_ascii can use it
+                # as an offset from the ascii_table. 
+
+        goto _init_all_ascii
+
+# Init all values
+#
+# Sets each value of the jump table to redirect to the <input_error> label
+# Goes to the digit initialization once all 256 values have been set.
+_init_all_ascii:
+        r4 := ascii_table + r3
+        m[r0][r4] := input_error
+        r3 := r3 + 1
+        if(r3 != 256) goto _init_all_ascii using r5
+        r3 := 48        # Assignment for _init_decimal_ascii occurs here so 
+                        # that it does not reset at each loop iteration. 
+                        # Note that 48 = '0' and 58 = ':'.
+
+        goto _init_decimal_ascii using r5
+
+# Init digits
+#
+# Initalizes digits in the jump table to redirect to the <digit> label. Goes 
+# to the command initialization once finished.
+_init_decimal_ascii:
+        r5 := ascii_table + r3
+        m[r0][r5] := digit
+        r3 := r3 + 1
+        if(r3 != 58) goto _init_decimal_ascii using r5 
+
+        goto _init_command_ascii
+
+# Init Commands
+#
+# Initializes arithmetic commands in jump table to the respective labels. Goes
+# to the end of the jump table init section.
+_init_command_ascii:
+        m[r0][ascii_table + ' ']  := waiting
+        m[r0][ascii_table + '+']  := add
+        m[r0][ascii_table + '-']  := subtract
+        m[r0][ascii_table + '*']  := multiply
+        m[r0][ascii_table + '/']  := divide
+        m[r0][ascii_table + '|']  := or
+        m[r0][ascii_table + '&']  := and
+        m[r0][ascii_table + 'c']  := change
+        m[r0][ascii_table + '~']  := complement
+        m[r0][ascii_table + 's']  := swap
+        m[r0][ascii_table + 'd']  := duplicate
+        m[r0][ascii_table + 'p']  := pop_stack
+        m[r0][ascii_table + 'z']  := zero
+        m[r0][ascii_table + '\n'] := newline
+
+        goto _init_ascii_end
+        
+# Ends initialization by popping the r4, r3 values off of the stack.
+# This init section thus will fall through to the callmain.ums init section.
+_init_ascii_end:
+        pop r4 off stack r2
+        pop r3 off stack r2
+
+############################################################
+#               RPN Calc Register Convention Changes             
+#
+# r1 usually remains return addr/value, but is sometimes stores a 
+#    value like input().
+# r3 Is the value-stack pointer for the RPN Calc.
+#
+############################################################
+
+########################################
+#
+#             main
+# 
+# Sets registers to needed values and calls
+# the main loop of the program. 
+#
+########################################
+.section text
+main:
+        push r1 on stack r2 # save the return address
+        push r3 on stack r2 # for poserity's sake save r3, r4, r5
+        push r4 on stack r2
+        push r5 on stack r2
+
+        r3 := value_stack # set r3 equal to the <value_stack> label
+        r4 := 0 # 0 = waiting-state, 1 = entering-state
+
+        goto query_loop
+
+########################################
+#
+#             query_loop
+# 
+# Reads input into r1 and accesses the correct 
+# label in the jump table.
+#
+########################################
+query_loop:
+        r1 := input()
+        if (r1 == 0xFFFFFFFF) goto end using r5 # 0xFFFFFFFF is EOF signal
+        r5 := ascii_table + r1 # jumps to the correct label for the input
+
+        goto m[r0][r5] using r5
+
+########################################
+#
+#             end
+# 
+# pops original register values off stack
+# and ends program by returning 0.
+#
+########################################
+end: 
+        pop r5 off stack r2 # Pops off all saved register values
+        pop r4 off stack r2
+        pop r3 off stack r2
+        pop r1 off stack r2
+
+        r6 := r1 # places the return addr into r6
+        r1 := 0 # main returns with an EXIT_SUCCESS code of 0
+        goto r6
+
+########################################
+#
+#             newline
+# 
+# Sets r4 to equal r3, the value_stack pointer.
+# This occurs so that r4 can be used as an index
+# and altered.
+#
+########################################
+newline:
+        r4 := r3
+
+        goto print_stack
+
+########################################
+#
+#             print_stack
+# 
+# Prints out the full stack every time there is
+# user input. Calls printd the value on the stack itself
+# linking r1.  
+#
+########################################
+print_stack:
+        if (r4 == value_stack) goto query_loop using r5
+        r5 := m[r0][r4] # r5 equals the integer at r4 index in the stack
+
+        output ">>> "
+        push r5 on stack r2
+        goto printd linking r1 # prints the integer properly
+        pop r5 off stack r2
+        output "\n"
+
+        r4 := r4 + 1 # index r4 to the next value in the value_stack.
+
+        goto print_stack
+
+########################################
+#
+#             waiting
+# 
+# Represents the waiting state which waits for 
+# input by calling the input loop linking r5.
+#
+########################################
+waiting:
+        r4 := 0 # sets r4 back to 0, the value for the waiting state.
+
+        goto query_loop using r5
+
+########################################
+#
+#             input_error
+# 
+# Prints an error message if the user input is invald. 
+# At this point in the program flow, r1 = input()
+#
+########################################
+input_error:
+        output "Unknown character '"
+        output r1
+        output "'\n"
+        goto waiting
+
+########################################
+#
+#             digit
+# 
+# Converts a digit to its int value and pushes 
+# it onto the stack. Note that r1 = input() here.
+#
+########################################
+digit:
+        if(r4 == 1) goto _concatenate_digit using r5 # if the program is in the
+                                                     # entering state.
+        r5 := r1 - 48
+        push r5 on stack r3
+
+        r4 := 1 # put the program into the entering state if it is not yet in
+                # it.
+        goto query_loop using r5
+
+########################################
+#
+#             concatenate digit
+# 
+# Converts multiple digit numbers into 
+# its integer value and pushes onto the stack
+#
+########################################
+_concatenate_digit:
+        pop r5 off stack r3 # get the most recent value pushed to the stack.s
+
+        r5 := r5 * 10 # concatenate the two digits.
+        r1 := r1 - 48
+        r5 := r5 + r1 
+
+        push r5 on stack r3 # push the corrected value back to the stack.
+
+        goto query_loop using r5 # return to the query loop - note that r4
+                                 # still is in the entering state at this pt.
+
+########################################
+#
+#             add
+# 
+# Adds the top two digits on the stack and pushes
+# the result. 
+# 
+########################################
+add:
+        if (r3 >s value_stack - 2) goto underflow_two using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # y
+        pop r5 off stack r3     # x
+        r5 := r5 + r4           # x + y
+        push r5 on stack r3
+
+        goto waiting
+
+########################################
+#
+#             subtract
+# 
+# Subtracts the value on top of the stack 
+# from the one below it and pushes the result
+#
+########################################
+subtract:
+        if (r3 >s value_stack - 2) goto underflow_two using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # y
+        pop r5 off stack r3     # x
+        r5 := r5 - r4           # x - y
+        push r5 on stack r3
+        goto waiting
+
+########################################
+#
+#             multiply
+# 
+# Multiplies the top two digits on the stack and 
+# pushes the result. 
+#
+########################################
+multiply:
+        if (r3 >s value_stack - 2) goto underflow_two using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # y
+        pop r5 off stack r3     # x
+        r5 := r5 * r4           # x * y
+        push r5 on stack r3
+        goto waiting
+
+########################################
+#
+#            divide
+# 
+# Divides the value on top of the stack 
+# from the one below it and pushes the result. 
+# Checks for negative values when dividing and goes to
+# correct function to account for negatives using r1
+#
+########################################
+divide:
+        if (r3 >s value_stack - 2) goto underflow_two using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # y
+        if (r4 == 0) goto _zero_divisor using r5 # checks for zero case
+        pop r5 off stack r3
+
+        if (r4 <s 0) goto _negative_divisor using r1 # checks for negatives
+        if (r5 <s 0) goto _negative_dividend using r1
+
+        r5 := r5 / r4           # x / y - normal division if no cases appear.
+
+        push r5 on stack r3
+        goto waiting
+
+########################################
+#
+#            _zero_divisor
+# 
+# Prints error message if user attempts to
+# divide by zero
+#
+########################################
+_zero_divisor:
+        push r4 on stack r3
+
+        output "Division by zero\n"
+
+        goto waiting
+
+########################################
+#
+#            _negative_divisor
+# 
+# Divides by a negative number and pushes result
+# onto the stack
+#
+########################################
+_negative_divisor:
+        if (r5 <s 0) goto _negative_divisor_and_dividend using r1
+
+        r4 := ~r4 # swap r4's sign to positive
+        r4 := r4 + 1
+        r5 := r5 / r4
+        r5 := ~r5
+        r5 := r5 + 1 # swap r5's sign to negative
+
+        push r5 on stack r3
+        goto waiting
+
+########################################
+#
+#            _negative_dividend
+# 
+# Divides from a negative number and pushes result
+# onto the stack
+#
+########################################
+_negative_dividend:
+        if (r4 <s 0) goto _negative_divisor_and_dividend using r1
+
+        r5 := ~r5 # swap r5's sign to positive
+        r5 := r5 + 1
+        r5 := r5 / r4
+        r5 := ~r5 # swap r5's sign to negative
+        r5 := r5 + 1
+
+        push r5 on stack r3
+        goto waiting
+
+########################################
+#
+#            _negative_dividend
+# 
+# Divides when both numbers are negative. 
+#
+########################################
+_negative_divisor_and_dividend:
+        r5 := ~r5 # swap r5's sign to positive
+        r5 := r5 + 1
+        r4 := ~r4 # swap r4's sign to positive
+        r4 := r4 + 1
+        r5 := r5 / r4
+
+        push r5 on stack r3
+        goto waiting
+
+########################################
+#
+#             or
+# 
+# Bitwise ors the top two values on the stack 
+# and pushes the result
+#
+########################################
+or:
+        if (r3 >s value_stack - 2) goto underflow_two using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # y
+        pop r5 off stack r3     # x
+        r5 := r5 | r4           # x | y
+
+        push r5 on stack r3
+        goto waiting
+
+########################################
+#
+#             and
+# 
+# Bitwise ands the top two values on the stack 
+# and pushes the result
+#
+########################################
+and:
+        if (r3 >s value_stack - 2) goto underflow_two using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # y
+        pop r5 off stack r3     # x
+        r5 := r5 & r4           # x & y
+
+        push r5 on stack r3
+        goto waiting
+
+########################################
+#
+#             changes
+# 
+# Changes the sign of the top value on the
+# stack.
+#
+########################################
+change:
+        if (r3 >s value_stack - 1) goto underflow_one using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # x
+        r4 := ~r4               # ~x
+        r4 := r4 + 1            # x + 1   
+
+        push r4 on stack r3
+        goto waiting
+
+########################################
+#
+#             complement
+# 
+# Changes all the bits in the top value on 
+# the stack
+#
+########################################
+complement:
+        if (r3 >s value_stack - 1) goto underflow_one using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # x
+        r4 := ~r4               # ~x
+
+        push r4 on stack r3
+        goto waiting
+
+########################################
+#
+#             swap
+# 
+# swaps the top two values on the stack
+#
+########################################
+swap:
+        if (r3 >s value_stack - 2) goto underflow_two using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3     # y
+        pop r5 off stack r3     # x
+        push r4 on stack r3     # swaps order on value stack.
+        push r5 on stack r3
+
+        goto waiting
+
+########################################
+#
+#             duplicate
+# 
+# duplicates the top value on the stack
+#
+########################################
+duplicate:
+        if (r3 >s value_stack - 1) goto underflow_one using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3
+        push r4 on stack r3 # duplicates r4
+        push r4 on stack r3
+        goto waiting
+
+########################################
+#
+#             pop_stack
+# 
+# Pops one value off the stack
+#
+########################################
+pop_stack:
+        if (r3 >s value_stack - 1) goto underflow_one using r5 # checks for 
+                                                               # enough digits.
+        pop r4 off stack r3
+
+        goto waiting
+
+########################################
+#
+#             zero
+# 
+# Clears the entire stack by popping 
+# values off of the value-stack until
+# r3 equals the <value_stack> label again.
+#
+########################################
+zero:
+        if (r3 == value_stack) goto waiting using r5 
+        pop r5 off stack r3
+        goto zero
+
+########################################
+#
+#             underflow_one
+# 
+# Prints an error message if user input requires an element 
+# and there is none on the stack
+#
+########################################
+underflow_one:
+        output "Stack underflow---expected at least 1 element\n"
+        goto waiting
+
+########################################
+#
+#             underflow_two
+# 
+# Prints an error message if user input requires two  
+# elements and there aren't enough on the stack
+#
+########################################
+underflow_two:
+        output "Stack underflow---expected at least 2 elements\n"
+        goto waiting

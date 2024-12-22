@@ -1,0 +1,114 @@
+
+############################################################   
+# 
+#                       printd.ums
+#
+# printd.ums contains the single function, printd, and its
+# helper functions/labels. printd prints the digits of any 
+# signed 32-bit integer. The umasm language requires the integer
+# 0x80000000 to have an explicit case.
+#
+# There are changes to the global register convention (GRC) in
+# this file. See function/section labels for change notes.
+#
+############################################################
+.zero  r0 # sets zero register to r0, per GRC
+.temps r6, r7 # sets r6, r7 as temp registers per GRC
+
+########################################
+#
+#             printd
+# 
+# printd recursively prints out the digits
+# of any 32-bit signed integer.
+#
+# printd uses r1 to store the parameter's
+# rightmost digit as well as a return addr.
+#
+# printd uses r4 to store the parameter.
+#
+# we use r1 for all 'goto's that need an
+# extra register to limit the number of 
+# registers overwritten.
+#
+########################################
+.section text
+printd:
+        push r1 on stack r2 # preserve contents of r1, r4
+        push r4 on stack r2
+
+        r4 := m[r0][r2 + 2] # set r4 equal to the function parameter.
+
+        # split the printing into separate cases: zero, positive, and negative.
+        # a fourth, special, sub-case is under positive.
+        if (r4 == 0) goto _zero using r1 
+        if (r4 >s 0) goto _posi using r1
+        goto _nega using r1
+
+# Zero Case
+#
+# Prints out 0, goes to return label
+_zero:
+        output "0"
+        goto _retq
+
+# Negative Case
+#
+# Does two's-complement sign switch, goes to positive label
+_nega:
+        output "-"
+        r4 := ~r4 # complete a two's-complement sign change on r4 .
+        r4 := r4 + 1
+        goto _posi
+
+# Positive Case (Base Case)
+#
+# Obtains the rightmost digit, tests if there are any remaining digits. If
+# there are, goes to the recursion label. If not, prints that final digit and
+# goes to the return label.
+_posi:
+        if (r4 <s 0) goto _spcl using r1 # tests for 0x80000000 case.
+
+        r1 := r4 mod 10 # get the rightmost decimal digit of the integer
+        r4 := r4 / 10 # 'knock' the rightmost digit off the integer 
+
+        if (r4 != 0) goto _rcrs # if it is not the base-case, then recurse
+
+        r1 := r1 + 48 # complete the ascii-transformation for output
+        output r1
+        goto _retq
+
+# Special Case - 0x80000000
+#
+# Prints out -2147483648 and goes to the return label
+_spcl:
+        output "-2147483648" # 0x80000000 special case output
+        goto _retq
+
+# Recursion
+#
+# Pushes r1, r4 to the stack, calls printd on the parameter integer / 10. Then
+# prints the r1 digit.
+_rcrs: 
+        push r1 on stack r2 # push the digit to the stack as goto overwrites r1
+        push r4 on stack r2 # push the new integer to the stack as the new
+                            # function parameter.
+        goto printd linking r1
+
+        pop r4 off stack r2 # pop pushed values
+        pop r1 off stack r2
+
+        r1 := r1 + 48 # complete the ascii-transformation for output
+        output r1
+        goto _retq
+
+# Return
+#
+# Pops r4, r1 off the stack. Goes to r1.
+_retq:
+        pop r4 off stack r2
+        pop r1 off stack r2
+
+        # note that we do not set a return value for r1 as this code-block has
+        # no return value - it is esentially of type void.
+        goto r1
